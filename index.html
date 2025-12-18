@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>🎄 Secret Santa</title>
 
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -54,9 +55,10 @@
 
 <div class="card">
   <h2>🎄 Secret Santa</h2>
-  <p>Введи своє імʼя, щоб дізнатись результат</p>
+  <p>Введи своє імʼя, щоб додатись і дізнатись результат</p>
 
   <input id="name" placeholder="Твоє імʼя">
+  <button onclick="join()">➕ Додатись</button>
   <button onclick="getResult()">🎁 Дізнатись результат</button>
 
   <p id="result"></p>
@@ -78,33 +80,66 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
 
-  const ADMIN_CODE = "7140";
+  const ADMIN_CODE = "1234";
 
-  async function getResult() {
+  // Глобальні функції
+  window.join = async function() {
     const name = document.getElementById('name').value.trim();
     if (!name) return alert('Введи імʼя');
 
+    const doc = await db.collection('participants').doc(name).get();
+    if (doc.exists) return alert('Це ім\'я вже додано!');
+
+    await db.collection('participants').doc(name).set({
+      givesTo: '',
+      revealed: false
+    });
+    alert('Ти доданий!');
+  }
+
+  window.getResult = async function() {
+    const name = document.getElementById('name').value.trim();
+    if (!name) return alert('Введи імʼя');
+
+    const doc = await db.collection('participants').doc(name).get();
+    if (!doc.exists) return alert('Тебе нема в списку. Натисни \"Додатись\"');
+
+    const data = doc.data();
+    if (data.revealed) {
+      document.getElementById('result').innerText = '😉 Ти вже знаєш, кому даруєш подарунок!';
+      return;
+    }
+
+    // Отримуємо всіх учасників
     const snap = await db.collection('participants').get();
     let participants = {};
     snap.forEach(d => participants[d.id] = d.data());
 
-    if (participants[name]?.revealed) {
-      document.getElementById('result').innerText =
-        '😉 Куди ти блять жмеш ще раз!';
-      return;
-    }
-
+    // Якщо ще не було жеребкування
     if (!Object.values(participants).some(p => p.givesTo)) {
       await draw(Object.keys(participants));
     }
 
-    const doc = await db.collection('participants').doc(name).get();
-    if (!doc.exists) return alert('Тебе нема в списку');
+    const updatedDoc = await db.collection('participants').doc(name).get();
+    const givesTo = updatedDoc.data().givesTo;
 
     await db.collection('participants').doc(name).update({ revealed: true });
 
-    document.getElementById('result').innerText =
-      '🎁 Ти даруєш подарунок: ' + doc.data().givesTo;
+    document.getElementById('result').innerText = '🎁 Ти даруєш подарунок: ' + givesTo;
+  }
+
+  window.resetGame = async function() {
+    const code = document.getElementById('adminCode').value;
+    if (code !== ADMIN_CODE) return alert('Невірний адмін-код');
+
+    const snap = await db.collection('participants').get();
+    for (const d of snap.docs) {
+      await db.collection('participants').doc(d.id).update({
+        givesTo: '',
+        revealed: false
+      });
+    }
+    alert('Гру скинуто 🎄');
   }
 
   async function draw(names) {
@@ -120,24 +155,11 @@
       });
     }
   }
-
-  async function resetGame() {
-    const code = document.getElementById('adminCode').value;
-    if (code !== ADMIN_CODE) return alert('Невірний адмін-код');
-
-    const snap = await db.collection('participants').get();
-    for (const d of snap.docs) {
-      await db.collection('participants').doc(d.id).update({
-        givesTo: '',
-        revealed: false
-      });
-    }
-    alert('Гру скинуто 🎄');
-  }
 </script>
 
 </body>
 </html>
+
 
 
 
