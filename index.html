@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>🎄 Secret Santa</title>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .card {
+      background: #ffffffee;
+      color: #333;
+      padding: 25px;
+      width: 100%;
+      max-width: 420px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.3);
+      text-align: center;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    button {
+      background: #2c5364;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover { opacity: .9; }
+    .admin {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px dashed #ccc;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>🎄 Secret Santa</h2>
+  <p>Введи своє імʼя, щоб дізнатись результат</p>
+
+  <input id="name" placeholder="Твоє імʼя">
+  <button onclick="getResult()">🎁 Дізнатись результат</button>
+
+  <p id="result"></p>
+
+  <div class="admin">
+    <h3>🔒 Адмін</h3>
+    <input id="adminCode" placeholder="Адмін-код" type="password">
+    <button onclick="resetGame()">🧹 Скинути гру</button>
+  </div>
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCDYXyGa-pI-KEvWwgnjwLl6oHMjEZJoJs",
+    authDomain: "secret-santa-88d28.firebaseapp.com",
+    projectId: "secret-santa-88d28",
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  const ADMIN_CODE = "7140";
+
+  async function getResult() {
+    const name = document.getElementById('name').value.trim();
+    if (!name) return alert('Введи імʼя');
+
+    const snap = await db.collection('participants').get();
+    let participants = {};
+    snap.forEach(d => participants[d.id] = d.data());
+
+    if (participants[name]?.revealed) {
+      document.getElementById('result').innerText =
+        '😉 Куди ти блять жмеш ще раз!';
+      return;
+    }
+
+    if (!Object.values(participants).some(p => p.givesTo)) {
+      await draw(Object.keys(participants));
+    }
+
+    const doc = await db.collection('participants').doc(name).get();
+    if (!doc.exists) return alert('Тебе нема в списку');
+
+    await db.collection('participants').doc(name).update({ revealed: true });
+
+    document.getElementById('result').innerText =
+      '🎁 Ти даруєш подарунок: ' + doc.data().givesTo;
+  }
+
+  async function draw(names) {
+    let shuffled;
+    do {
+      shuffled = [...names].sort(() => Math.random() - 0.5);
+    } while (shuffled.some((n, i) => n === names[i]));
+
+    for (let i = 0; i < names.length; i++) {
+      await db.collection('participants').doc(names[i]).set({
+        givesTo: shuffled[i],
+        revealed: false
+      });
+    }
+  }
+
+  async function resetGame() {
+    const code = document.getElementById('adminCode').value;
+    if (code !== ADMIN_CODE) return alert('Невірний адмін-код');
+
+    const snap = await db.collection('participants').get();
+    for (const d of snap.docs) {
+      await db.collection('participants').doc(d.id).update({
+        givesTo: '',
+        revealed: false
+      });
+    }
+    alert('Гру скинуто 🎄');
+  }
+</script>
+
+</body>
+</html>
+
+
+
+
+
