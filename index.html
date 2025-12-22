@@ -1,164 +1,214 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-  <meta charset="UTF-8">
-  <title>🎄 Secret Santa</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Таємний Санта</title>
 
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+    * {
+        box-sizing: border-box;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
+    }
 
-  <style>
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-      min-height: 100vh;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
+        margin: 0;
+        height: 100vh;
+        background: linear-gradient(135deg, #ff4e50, #f9d423);
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
-    .card {
-      background: #ffffffee;
-      color: #333;
-      padding: 25px;
-      width: 100%;
-      max-width: 420px;
-      border-radius: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.3);
-      text-align: center;
+
+    .phone {
+        width: 360px;
+        max-width: 95%;
+        height: 640px;
+        background: #fff;
+        border-radius: 30px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+        padding: 25px 20px;
+        display: flex;
+        flex-direction: column;
     }
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 12px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      font-size: 16px;
+
+    .header {
+        text-align: center;
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 30px;
     }
+
+    .header span {
+        font-size: 26px;
+        margin-right: 5px;
+    }
+
+    .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    input {
+        width: 100%;
+        padding: 14px;
+        font-size: 16px;
+        border-radius: 12px;
+        border: 1px solid #ddd;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    input:disabled {
+        background: #f2f2f2;
+    }
+
     button {
-      background: #2c5364;
-      color: #fff;
-      border: none;
-      cursor: pointer;
+        padding: 14px;
+        font-size: 16px;
+        border-radius: 12px;
+        border: none;
+        background: #ff4e50;
+        color: white;
+        cursor: pointer;
+        transition: 0.3s;
     }
-    button:hover { opacity: .9; }
-    .admin {
-      margin-top: 20px;
-      padding-top: 15px;
-      border-top: 1px dashed #ccc;
+
+    button:hover {
+        background: #e64547;
     }
-  </style>
+
+    #result {
+        margin-top: 25px;
+        text-align: center;
+        font-size: 18px;
+        font-weight: 600;
+        min-height: 24px;
+    }
+
+    .footer {
+        text-align: center;
+        font-size: 12px;
+        color: #999;
+        margin-top: 10px;
+    }
+</style>
 </head>
 <body>
 
-<div class="card">
-  <h2>🎄 Secret Santa</h2>
-  <p>Введи своє імʼя, щоб додатись і дізнатись результат</p>
+<div class="phone">
+    <div class="header"><span>🎅</span>Таємний Санта</div>
 
-  <input id="name" placeholder="Твоє імʼя">
-  <button onclick="join()">➕ Додатись</button>
-  <button onclick="getResult()">🎁 Дізнатись результат</button>
+    <div class="content">
+        <input type="text" id="nameInput" placeholder="Введи своє імʼя">
+        <button onclick="showResult()">Дізнатись</button>
+        <button onclick="adminReset()" style="margin-top:15px;background:#555;font-size:14px;">
+    🔄 Рестарт (адмін)
+</button>
 
-  <p id="result"></p>
+        <div id="result"></div>
+    </div>
 
-  <div class="admin">
-    <h3>🔒 Адмін</h3>
-    <input id="adminCode" placeholder="Адмін-код" type="password">
-    <button onclick="resetGame()">🧹 Скинути гру</button>
-  </div>
+    <div class="footer">Secret Santa App</div>
 </div>
 
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyCDYXyGa-pI-KEvWwgnjwLl6oHMjEZJoJs",
-    authDomain: "secret-santa-88d28.firebaseapp.com",
-    projectId: "secret-santa-88d28",
-  };
+    const people = [
+        "Андрій",
+        "Костя",
+        "Ігор",
+        "Артур",
+        "Іванка",
+        "Маріанна",
+        "Віка",
+        "Юля"
+    ];
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
+    const STORAGE_KEY = "secret_santa_pairs";
+    const USED_KEY = "secret_santa_used";
+    const ADMIN_PASSWORD = "admin123"; // зміни за потреби
 
-  const ADMIN_CODE = "1234";
+    let pairs = {};
+    let used = [];
 
-  // Глобальні функції
-  window.join = async function() {
-    const name = document.getElementById('name').value.trim();
-    if (!name) return alert('Введи імʼя');
+    function generatePairs(list) {
+        let shuffled;
+        do {
+            shuffled = [...list].sort(() => Math.random() - 0.5);
+        } while (shuffled.some((name, i) => name === list[i]));
 
-    const doc = await db.collection('participants').doc(name).get();
-    if (doc.exists) return alert('Це ім\'я вже додано!');
-
-    await db.collection('participants').doc(name).set({
-      givesTo: '',
-      revealed: false
-    });
-    alert('Ти доданий!');
-  }
-
-  window.getResult = async function() {
-    const name = document.getElementById('name').value.trim();
-    if (!name) return alert('Введи імʼя');
-
-    const doc = await db.collection('participants').doc(name).get();
-    if (!doc.exists) return alert('Тебе нема в списку. Натисни \"Додатись\"');
-
-    const data = doc.data();
-    if (data.revealed) {
-      document.getElementById('result').innerText = '😉 Ти вже знаєш, кому даруєш подарунок!';
-      return;
+        const result = {};
+        list.forEach((name, i) => {
+            result[name.toLowerCase()] = shuffled[i];
+        });
+        return result;
     }
 
-    // Отримуємо всіх учасників
-    const snap = await db.collection('participants').get();
-    let participants = {};
-    snap.forEach(d => participants[d.id] = d.data());
+    function initGame() {
+        const storedPairs = localStorage.getItem(STORAGE_KEY);
+        const storedUsed = localStorage.getItem(USED_KEY);
 
-    // Якщо ще не було жеребкування
-    if (!Object.values(participants).some(p => p.givesTo)) {
-      await draw(Object.keys(participants));
+        if (storedPairs && storedUsed) {
+            pairs = JSON.parse(storedPairs);
+            used = JSON.parse(storedUsed);
+        } else {
+            pairs = generatePairs(people);
+            used = [];
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(pairs));
+            localStorage.setItem(USED_KEY, JSON.stringify(used));
+        }
     }
 
-    const updatedDoc = await db.collection('participants').doc(name).get();
-    const givesTo = updatedDoc.data().givesTo;
+    initGame();
 
-    await db.collection('participants').doc(name).update({ revealed: true });
+    function showResult() {
+        const input = document.getElementById("nameInput");
+        const result = document.getElementById("result");
+        const name = input.value.trim().toLowerCase();
 
-    document.getElementById('result').innerText = '🎁 Ти даруєш подарунок: ' + givesTo;
-  }
+        if (!pairs[name]) {
+            result.textContent = "❌ Імʼя не знайдено";
+            return;
+        }
 
-  window.resetGame = async function() {
-    const code = document.getElementById('adminCode').value;
-    if (code !== ADMIN_CODE) return alert('Невірний адмін-код');
+        if (used.includes(name)) {
+            result.textContent = "⛔ Ти вже дізнався свій результат";
+            input.disabled = true;
+            return;
+        }
 
-    const snap = await db.collection('participants').get();
-    for (const d of snap.docs) {
-      await db.collection('participants').doc(d.id).update({
-        givesTo: '',
-        revealed: false
-      });
+        result.textContent = "🎁 Ти даруєш подарунок: " + pairs[name];
+
+        used.push(name);
+        localStorage.setItem(USED_KEY, JSON.stringify(used));
+        input.disabled = true;
     }
-    alert('Гру скинуто 🎄');
-  }
 
-  async function draw(names) {
-    let shuffled;
-    do {
-      shuffled = [...names].sort(() => Math.random() - 0.5);
-    } while (shuffled.some((n, i) => n === names[i]));
+    function adminReset() {
+        const ADMIN_PASSWORD = "admin123";
+        const pass = prompt("Введи пароль адміністратора:");
+        if (pass !== ADMIN_PASSWORD) {
+            alert("❌ Невірний пароль");
+            return;
+        }
 
-    for (let i = 0; i < names.length; i++) {
-      await db.collection('participants').doc(names[i]).set({
-        givesTo: shuffled[i],
-        revealed: false
-      });
+        pairs = generatePairs(people);
+        used = [];
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pairs));
+        localStorage.setItem(USED_KEY, JSON.stringify(used));
+
+        alert("✅ Гру перезапущено");
+        location.reload();
     }
-  }
 </script>
+
 
 </body>
 </html>
+
 
 
 
